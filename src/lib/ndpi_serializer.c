@@ -246,6 +246,10 @@ void ndpi_reset_serializer(ndpi_serializer *_serializer) {
 
   serializer->status.flags = 0;
 
+  /* A snapshot describes state that a reset discards: drop it, or a later
+     rollback_snapshot() resurrects the pre-reset buffer. */
+  serializer->has_snapshot = 0;
+
   if(serializer->fmt == ndpi_serialization_format_json) {
     u_int32_t buff_diff;
 
@@ -264,6 +268,10 @@ void ndpi_reset_serializer(ndpi_serializer *_serializer) {
     serializer->status.header.size_used = 0;
     serializer->status.buffer.size_used = 0;
   } else { /* ndpi_serialization_format_tlv */
+    /* The version/format header is part of the record: restore it here, as
+       init does, or writes past a truncated size_used leave stale bytes. */
+    serializer->buffer.data[0] = 1; /* version */
+    serializer->buffer.data[1] = (u_int8_t) serializer->fmt;
     serializer->status.buffer.size_used = 2 * sizeof(u_int8_t);
   }
 }

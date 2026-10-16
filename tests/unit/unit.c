@@ -262,6 +262,46 @@ int serializerUnitTest() {
 
 /* *********************************************** */
 
+int serializerResetUnitTest() {
+  ndpi_serializer serializer;
+  u_int32_t buffer_len;
+  char *buffer;
+
+  /* Reset must restore the TLV version/format header, not leave whatever a
+     previous write (or ndpi_serializer_set_buffer_len()) put there. */
+  assert(ndpi_init_serializer(&serializer, ndpi_serialization_format_tlv) != -1);
+  ndpi_serializer_set_buffer_len(&serializer, 0);
+  assert(ndpi_serialize_uint32_uint32(&serializer, 3, 33) == 0);
+  ndpi_reset_serializer(&serializer);
+
+  buffer_len = 0;
+  buffer = ndpi_serializer_get_buffer(&serializer, &buffer_len);
+  assert(buffer_len == 2);
+  assert((u_int8_t)buffer[0] == 1); /* version */
+  assert((u_int8_t)buffer[1] == (u_int8_t)ndpi_serialization_format_tlv);
+  ndpi_term_serializer(&serializer);
+
+  /* Reset must drop a snapshot taken before it, not resurrect it on rollback. */
+  assert(ndpi_init_serializer(&serializer, ndpi_serialization_format_tlv) != -1);
+  assert(ndpi_serialize_uint32_uint32(&serializer, 1, 11) == 0);
+  ndpi_serializer_create_snapshot(&serializer);
+  assert(ndpi_serialize_uint32_uint32(&serializer, 2, 22) == 0);
+  ndpi_reset_serializer(&serializer);
+  ndpi_serializer_rollback_snapshot(&serializer);
+
+  buffer_len = 0;
+  buffer = ndpi_serializer_get_buffer(&serializer, &buffer_len);
+  assert(buffer_len == 2);
+  assert((u_int8_t)buffer[0] == 1);
+  assert((u_int8_t)buffer[1] == (u_int8_t)ndpi_serialization_format_tlv);
+  ndpi_term_serializer(&serializer);
+
+  printf("%30s                      OK\n", __func__);
+  return 0;
+}
+
+/* *********************************************** */
+
 int serializeProtoUnitTest(void)
 {
   ndpi_serializer serializer;
@@ -417,6 +457,7 @@ int main(int argc, char **argv) {
     
   /* Tests */
   if (serializerUnitTest() != 0) return -1;
+  if (serializerResetUnitTest() != 0) return -1;
   if (serializeProtoUnitTest() != 0) return -1;
 
   return 0;
